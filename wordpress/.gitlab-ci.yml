@@ -1,0 +1,37 @@
+image: docker:dind
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+variables:
+  DOCKER_IMAGE: $CI_REGISTRY_IMAGE
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      variables:
+        environment: prod
+    - if: '$CI_COMMIT_BRANCH == "staging"'
+      variables:
+        environment: staging
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+        environment: dev
+    - when: always
+      variables:
+        environment: dev
+  script:
+    - echo "🚀 Starting Docker daemon..."
+    - dockerd-entrypoint.sh &
+    - echo "🔍 Waiting for Docker daemon to be ready..."
+    - timeout 60 sh -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker build --build-arg BUILDKIT_INLINE_CACHE=1 --build-arg ENV=$environment --build-arg OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT -t "$DOCKER_IMAGE:$IMAGE_TAG" .
+    - docker push "$DOCKER_IMAGE:$IMAGE_TAG"

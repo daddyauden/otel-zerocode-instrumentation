@@ -1,0 +1,52 @@
+name: build
+
+run-name: build wordpress container image with opentelemetry, base image from bitnami/wordpress
+
+on: pull_request
+
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: vars
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+
+          if [[ "$BRANCH_NAME" == "main" ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          elif [[ "$BRANCH_NAME" == "staging" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "commit_short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+    outputs:
+      environment: ${{ steps.vars.outputs.environment }}
+      commit_short_sha: ${{ steps.vars.outputs.commit_short_sha }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs:
+      - deps
+    environment: ${{ needs.deps.outputs.environment }}
+    env:
+      environment: ${{ needs.deps.outputs.environment }}
+      commit_short_sha: ${{ needs.deps.outputs.commit_short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: echo "${{ secrets.CI_REGISTRY_PASSWORD }}" | docker login -u "${{ secrets.CI_REGISTRY_USER }}" --password-stdin "${{ secrets.CI_REGISTRY }}"
+
+      - run: |
+          docker build \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --build-arg ENV="${{ env.environment }}" \
+          --build-arg OTEL_EXPORTER_OTLP_ENDPOINT="${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}" \
+          -t ${{ secrets.CI_REGISTRY }}/${{ secrets.CI_REGISTRY_IMAGE }}:${{ env.commit_short_sha }} .
+
+      - run: |
+          docker push ${{ secrets.CI_REGISTRY }}/${{ secrets.CI_REGISTRY_IMAGE }}:${{ env.commit_short_sha }}
