@@ -1,6 +1,6 @@
 # Zero-Code Instrumentation
 
-## 1. PHP Zero-Code Instrumentation
+## 1. WordPress Zero-Code Instrumentation
 
 > This use case involves deploying WordPress on a Kubernetes (K8s) platform. When installing the WordPress Helm chart, the default image does not include OpenTelemetry instrumentation. While it is possible to install the required components inside pods, this approach is not ideal for automated deployments. Building a WordPress image with built-in OpenTelemetry support enables fully automated deployment workflows.
 
